@@ -493,49 +493,71 @@ const getAllTalents = handler(async (req, res) => {
   console.log("Authenticated user:", req.user._id);
 
   const talents = await talentModel
-    .find()
+    .find({
+      name: { $exists: true, $ne: null, $ne: "" },
+      role: { $exists: true, $ne: null, $ne: "" },
+      gender: { $exists: true, $ne: null, $ne: "" },
+      age: { $exists: true, $ne: null },
+      height: { $exists: true, $ne: null, $ne: "" },
+      weight: { $exists: true, $ne: null, $ne: "" },
+      bodyType: { $exists: true, $ne: null, $ne: "" },
+      skinTone: { $exists: true, $ne: null, $ne: "" },
+      language: { $exists: true, $ne: null, $ne: "" },
+      skills: { $exists: true, $ne: null, $ne: "" },
+      "images.front.url": { $exists: true, $ne: null, $ne: "" },
+      "images.left.url": { $exists: true, $ne: null, $ne: "" },
+      "images.right.url": { $exists: true, $ne: null, $ne: "" },
+      "video.url": { $exists: true, $ne: null, $ne: "" },
+      makeoverNeeded: { $exists: true, $ne: null },
+      willingToWorkAsExtra: { $exists: true, $ne: null },
+      aboutYourself: { $exists: true, $ne: null, $ne: "" },
+      deviceToken: { $exists: true, $ne: null, $ne: "" },
+      createdAt: { $exists: true, $ne: null },
+      updatedAt: { $exists: true, $ne: null },
+    })
     .select(
-      "name role gender age height weight bodyType skinTone language skills images.profilePic images.front images.left images.right video makeoverNeeded willingToWorkAsExtra aboutYourself createdAt updatedAt"
+      "name role gender age height weight bodyType skinTone language skills images.profilePic images.front images.left images.right video makeoverNeeded willingToWorkAsExtra aboutYourself deviceToken createdAt updatedAt"
     )
     .lean();
 
   if (!talents || talents.length === 0) {
     res.status(404);
-    throw new Error("No talents found");
+    throw new Error("No talents with complete data found");
   }
 
-  // Format talents to ensure default values and include token
+  // Format talents for response
   const formattedTalents = talents.map((talent) => ({
     _id: talent._id,
     name: talent.name,
     role: talent.role,
     gender: talent.gender,
-    age: talent.age || null,
-    height: talent.height || null,
-    weight: talent.weight || null,
-    bodyType: talent.bodyType || "",
-    skinTone: talent.skinTone || "",
+    deviceToken: talent.deviceToken,
+    age: talent.age,
+    height: talent.height,
+    weight: talent.weight,
+    bodyType: talent.bodyType,
+    skinTone: talent.skinTone,
     language: Array.isArray(talent.language)
       ? talent.language.join(", ")
-      : talent.language || "",
+      : talent.language,
     skills: Array.isArray(talent.skills)
       ? talent.skills.join(", ")
-      : talent.skills || "",
+      : talent.skills,
     profilePic: talent.images?.profilePic?.url || null,
-    frontImage: talent.images?.front?.url || null,
-    leftImage: talent.images?.left?.url || null,
-    rightImage: talent.images?.right?.url || null,
-    video: talent.video?.url || null,
-    makeoverNeeded: talent.makeoverNeeded || false,
-    willingToWorkAsExtra: talent.willingToWorkAsExtra || false,
-    aboutYourself: talent.aboutYourself || "",
+    frontImage: talent.images.front.url,
+    leftImage: talent.images.left.url,
+    rightImage: talent.images.right.url,
+    video: talent.video.url,
+    makeoverNeeded: talent.makeoverNeeded,
+    willingToWorkAsExtra: talent.willingToWorkAsExtra,
+    aboutYourself: talent.aboutYourself,
     createdAt: talent.createdAt,
     updatedAt: talent.updatedAt,
-    token: generateToken(talent._id, talent.role), // Generate and include token
+    token: generateToken(talent._id, talent.role),
   }));
 
   res.json({
-    message: "Talents retrieved successfully",
+    message: "Talents with complete data retrieved successfully",
     talents: formattedTalents,
   });
 });
