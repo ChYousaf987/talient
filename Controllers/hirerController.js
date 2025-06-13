@@ -31,12 +31,28 @@ const sendOTP = (email, otp) => {
   });
 
   const mailOptions = {
-    from: process.env.MAIL_USER,
+    from: '"Showbiz App" <' + process.env.MAIL_USER + ">",
     to: email,
-    subject: "OTP Verification",
-    html: `<h2>Your OTP is: <strong>${otp}</strong></h2>`,
+    subject: "Verify Your Showbiz App Account",
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #333;">
+        <h2 style="color: #1a73e8;">Welcome to Showbiz App!</h2>
+        <p>Thank you for joining Showbiz App. To complete your registration, please use the following One-Time Password (OTP):</p>
+        <h3 style="background: #f1f3f4; padding: 10px; border-radius: 5px; text-align: center; color: #1a73e8;">
+          ${otp}
+        </h3>
+        <p>This OTP is valid for 10 minutes. Please do not share it with anyone.</p>
+        <p>If you did not request this OTP, please ignore this email or contact our support team at support@showbizapp.com.</p>
+        <p style="margin-top: 20px;">Best regards,<br>The Showbiz App Team</p>
+        <hr style="border-top: 1px solid #ddd; margin: 20px 0;">
+        <p style="font-size: 12px; color: #777;">
+          © ${new Date().getFullYear()} Showbiz App. All rights reserved.<br>
+          <a href="https://www.showbizapp.com" style="color: #1a73e8; text-decoration: none;">Visit our website</a> | 
+          <a href="https://www.showbizapp.com/privacy" style="color: #1a73e8; text-decoration: none;">Privacy Policy</a>
+        </p>
+      </div>
+    `,
   };
-
   transporter.sendMail(mailOptions, (error) => {
     if (error) {
       console.error("Email sending error:", error);
