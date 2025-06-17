@@ -66,7 +66,7 @@ const TalentSchema = new mongoose.Schema(
       enum: ["Fair", "Wheatish", "Dusky"],
     },
     language: {
-      type: String,
+      type: Array,
     },
     skills: {
       type: String,
