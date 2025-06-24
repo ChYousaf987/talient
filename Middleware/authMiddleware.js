@@ -43,13 +43,22 @@ const authHandler = handler(async (req, res, next) => {
       throw new Error("User not found");
     }
 
+    // Determine user type
+    const userType = talent ? "Talent" : "Hirer";
+
     console.log("Authenticated user:", {
       email: user.email,
-      role: user.role,
+      role: user.role || "Not set",
       id: user._id,
+      userType,
     });
 
-    req.user = { _id: user._id, role: user.role, email: user.email };
+    req.user = {
+      _id: user._id,
+      role: user.role || userType, // Fallback to userType if role is not set
+      email: user.email,
+      userType, // Add userType to distinguish Talent vs Hirer
+    };
     next();
   } catch (err) {
     console.error("Token verification error:", err.message);

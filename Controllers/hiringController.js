@@ -1,4 +1,5 @@
 const handler = require("express-async-handler");
+const mongoose = require("mongoose");
 const hiringRequestModel = require("../Models/hiringRequestModel");
 const talentModel = require("../Models/talentModel");
 
@@ -7,26 +8,47 @@ const sendHiringRequest = handler(async (req, res) => {
   const { talentId, message } = req.body;
   const hirerId = req.user._id;
 
+  // Validate IDs
+  if (
+    !mongoose.isValidObjectId(talentId) ||
+    !mongoose.isValidObjectId(hirerId)
+  ) {
+    res.status(400);
+    throw new Error("Invalid hirer or talent ID");
+  }
+
+  // Check if user is a Hirer
+  if (req.user.userType !== "Hirer") {
+    res.status(403);
+    throw new Error("Only hirers can send hiring requests");
+  }
+
+  // Check if talent exists
   const talent = await talentModel.findById(talentId);
+  console.log("Found talent:", talent);
   if (!talent) {
     res.status(404);
     throw new Error("Talent not found");
   }
 
+  // Check for existing request
   const existingRequest = await hiringRequestModel.findOne({
     hirer: hirerId,
     talent: talentId,
   });
+  console.log("Existing request:", existingRequest);
   if (existingRequest) {
     res.status(400);
     throw new Error("You have already sent a request to this talent");
   }
 
+  // Create new request
   const request = await hiringRequestModel.create({
     hirer: hirerId,
     talent: talentId,
     message,
   });
+  console.log("Created request:", request);
 
   res
     .status(201)
@@ -37,35 +59,50 @@ const sendHiringRequest = handler(async (req, res) => {
 const getTalentRequests = handler(async (req, res) => {
   const talentId = req.user._id;
 
+  // Check if user is a Talent
+  if (req.user.userType !== "Talent") {
+    res.status(403);
+    throw new Error("Only talents can view received requests");
+  }
+
+  console.log("Querying talent requests for ID:", talentId);
   const requests = await hiringRequestModel
     .find({ talent: talentId })
     .populate("hirer", "name profilePic_url role");
-  res.json(requests);
+  console.log("Talent requests:", requests);
+
+  res.json({
+    message: requests.length
+      ? "Requests retrieved successfully"
+      : "No requests found",
+    requests,
+  });
 });
 
-// Get requests sent by a hirer
 // Get requests sent by a hirer
 const getHirerRequests = handler(async (req, res) => {
   const hirerId = req.user._id;
 
-  const requests = await hiringRequestModel
-    .find({ hirer: hirerId })
-    .populate("talent", "name profilePic role") // Talent fields
-    .populate("hirer", "name profilePic_url role") // Hirer fields for consistency
-    .select("message status createdAt") // Explicitly select createdAt
-    .lean();
-
-  if (!requests || requests.length === 0) {
-    res.status(404);
-    throw new Error("No hiring requests found for this hirer");
+  // Check if user is a Hirer
+  if (req.user.userType !== "Hirer") {
+    res.status(403);
+    throw new Error("Only hirers can view sent requests");
   }
+
+  console.log("Querying hirer requests for ID:", hirerId);
+  const requests = await hiringRequestModel
+    .find({ hirer: mongoose.Types.ObjectId(hirerId) })
+    .populate("talent", "name profilePic role")
+    .populate("hirer", "name profilePic_url role")
+    .lean();
+  console.log("Found requests:", requests);
 
   // Format requests for response
   const formattedRequests = requests.map((request) => ({
     _id: request._id,
     message: request.message,
     status: request.status,
-    createdAt: request.createdAt || new Date(), // Fallback to current date if createdAt is missing
+    createdAt: request.createdAt,
     hirer: {
       _id: request.hirer._id,
       name: request.hirer.name || "Unknown Hirer",
@@ -81,7 +118,9 @@ const getHirerRequests = handler(async (req, res) => {
   }));
 
   res.json({
-    message: "Hiring requests retrieved successfully",
+    message: requests.length
+      ? "Hiring requests retrieved successfully"
+      : "No requests found",
     requests: formattedRequests,
   });
 });
@@ -91,9 +130,20 @@ const updateRequestStatus = handler(async (req, res) => {
   const { requestId, status } = req.body;
   const talentId = req.user._id;
 
+  // Check if user is a Talent
+  if (req.user.userType !== "Talent") {
+    res.status(403);
+    throw new Error("Only talents can update request status");
+  }
+
   if (!["Accepted", "Rejected"].includes(status)) {
     res.status(400);
     throw new Error("Invalid status");
+  }
+
+  if (!mongoose.isValidObjectId(requestId)) {
+    res.status(400);
+    throw new Error("Invalid request ID");
   }
 
   const request = await hiringRequestModel.findById(requestId);
@@ -110,7 +160,7 @@ const updateRequestStatus = handler(async (req, res) => {
 
   if (status === "Rejected") {
     // Delete the request if rejected
-    await hiringRequestModel.deleteOne({ _id: requestId });
+    await request.deleteOne();
     res.json({ message: "Request rejected and deleted" });
   } else {
     // Update status if accepted

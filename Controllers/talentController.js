@@ -5,6 +5,7 @@ const nodemailer = require("nodemailer");
 const cloudinary = require("cloudinary").v2;
 const talentModel = require("../Models/talentModel");
 const talentSubmissionModel = require("../Models/hirerSubmissionModel");
+const hiringRequestModel = require("../Models/hiringRequestModel");
 const { Readable } = require("stream");
 
 // Configure Cloudinary
@@ -123,7 +124,7 @@ const registerTalent = handler(async (req, res) => {
 
   sendOTP(email, otp);
 
-  const token = generateToken(createdTalent._id);
+  const token = generateToken(createdTalent._id, createdTalent.role);
 
   res.json({
     message: "OTP sent to email. Please verify to complete registration.",
@@ -159,7 +160,7 @@ const loginTalent = handler(async (req, res) => {
     email: talent.email,
     phone: talent.phone,
     role: talent.role,
-    token: generateToken(talent._id),
+    token: generateToken(talent._id, talent.role),
   });
 });
 
@@ -193,7 +194,7 @@ const verifyTalentOTP = handler(async (req, res) => {
     email: user.email,
     phone: user.phone,
     role: user.role,
-    token: generateToken(user._id),
+    token: generateToken(user._id, user.role),
     message: "OTP verified successfully",
   });
 });
@@ -509,6 +510,13 @@ const getTalentProfile = handler(async (req, res) => {
 const getAllTalents = handler(async (req, res) => {
   console.log("Authenticated user:", req.user._id);
 
+  // Check if user is a Hirer
+  if (!req.user || req.user.userType !== "Hirer") {
+    res.status(403);
+    throw new Error("Only hirers can view all talents");
+  }
+
+  // Fetch all talents with complete data
   const talents = await talentModel
     .find({
       name: { $exists: true, $ne: null, $ne: "" },
@@ -533,7 +541,7 @@ const getAllTalents = handler(async (req, res) => {
       updatedAt: { $exists: true, $ne: null },
     })
     .select(
-      "name role gender age height weight bodyType skinTone language skills images.profilePic images.front images.left images.right video makeoverNeeded willingToWorkAsExtra aboutYourself deviceToken createdAt updatedAt"
+      "name email phone role gender age height weight bodyType skinTone language skills images.profilePic images.front images.left images.right video makeoverNeeded willingToWorkAsExtra aboutYourself deviceToken createdAt updatedAt"
     )
     .lean();
 
@@ -542,36 +550,55 @@ const getAllTalents = handler(async (req, res) => {
     throw new Error("No talents with complete data found");
   }
 
-  // Format talents for response
-  const formattedTalents = talents.map((talent) => ({
-    _id: talent._id,
-    name: talent.name,
-    role: talent.role,
-    gender: talent.gender,
-    deviceToken: talent.deviceToken,
-    age: talent.age,
-    height: talent.height,
-    weight: talent.weight,
-    bodyType: talent.bodyType,
-    skinTone: talent.skinTone,
-    language: Array.isArray(talent.language)
-      ? talent.language.join(", ")
-      : talent.language,
-    skills: Array.isArray(talent.skills)
-      ? talent.skills.join(", ")
-      : talent.skills,
-    profilePic: talent.images?.profilePic?.url || null,
-    frontImage: talent.images.front.url,
-    leftImage: talent.images.left.url,
-    rightImage: talent.images.right.url,
-    video: talent.video.url,
-    makeoverNeeded: talent.makeoverNeeded,
-    willingToWorkAsExtra: talent.willingToWorkAsExtra,
-    aboutYourself: talent.aboutYourself,
-    createdAt: talent.createdAt,
-    updatedAt: talent.updatedAt,
-    token: generateToken(talent._id, talent.role),
-  }));
+  // Fetch accepted hiring requests for the authenticated hirer
+  const acceptedRequests = await hiringRequestModel
+    .find({
+      hirer: req.user._id,
+      status: "Accepted",
+    })
+    .select("talent")
+    .lean();
+
+  // Create a Set of talent IDs with accepted requests
+  const connectedTalentIds = new Set(
+    acceptedRequests.map((request) => request.talent.toString())
+  );
+
+  // Format talents for response, including email and phone for all talents
+  const formattedTalents = talents.map((talent) => {
+    const isConnected = connectedTalentIds.has(talent._id.toString());
+    return {
+      _id: talent._id,
+      name: talent.name,
+      role: talent.role,
+      gender: talent.gender,
+      deviceToken: talent.deviceToken,
+      age: talent.age,
+      height: talent.height,
+      weight: talent.weight,
+      bodyType: talent.bodyType,
+      skinTone: talent.skinTone,
+      language: Array.isArray(talent.language)
+        ? talent.language.join(", ")
+        : talent.language,
+      skills: Array.isArray(talent.skills)
+        ? talent.skills.join(", ")
+        : talent.skills,
+      profilePic: talent.images?.profilePic?.url || null,
+      frontImage: talent.images.front.url,
+      leftImage: talent.images.left.url,
+      rightImage: talent.images.right.url,
+      video: talent.video.url,
+      makeoverNeeded: talent.makeoverNeeded,
+      willingToWorkAsExtra: talent.willingToWorkAsExtra,
+      aboutYourself: talent.aboutYourself,
+      createdAt: talent.createdAt,
+      updatedAt: talent.updatedAt,
+      email: isConnected ? talent.email : "",
+      phone: isConnected ? talent.phone : "",
+      token: generateToken(talent._id, talent.role),
+    };
+  });
 
   res.json({
     message: "Talents with complete data retrieved successfully",
