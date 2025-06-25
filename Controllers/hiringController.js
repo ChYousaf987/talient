@@ -2,6 +2,7 @@ const handler = require("express-async-handler");
 const mongoose = require("mongoose");
 const hiringRequestModel = require("../Models/hiringRequestModel");
 const talentModel = require("../Models/talentModel");
+const Hirer = require("../Models/hirerModel"); // Use Hirer model instead of User
 
 // Send a hiring request
 const sendHiringRequest = handler(async (req, res) => {
@@ -18,7 +19,13 @@ const sendHiringRequest = handler(async (req, res) => {
   }
 
   // Check if user is a Hirer
-  if (req.user.userType !== "Hirer") {
+  if (
+    req.user.role !== "Director" &&
+    req.user.role !== "Assistant Director" &&
+    req.user.role !== "Casting Director" &&
+    req.user.role !== "Event Manager" &&
+    req.user.role !== "Other"
+  ) {
     res.status(403);
     throw new Error("Only hirers can send hiring requests");
   }
@@ -57,19 +64,27 @@ const sendHiringRequest = handler(async (req, res) => {
 
 // Get requests received by a talent
 const getTalentRequests = handler(async (req, res) => {
-  const talentId = req.user._id;
+  const { talentId } = req.params;
 
-  // Check if user is a Talent
-  if (req.user.userType !== "Talent") {
-    res.status(403);
-    throw new Error("Only talents can view received requests");
+  // Validate talentId
+  if (!talentId || !mongoose.isValidObjectId(talentId)) {
+    res.status(400);
+    throw new Error("Valid talent ID is required");
   }
 
-  console.log("Querying talent requests for ID:", talentId);
+  // Check if talent exists
+  const talent = await talentModel.findById(talentId);
+  if (!talent) {
+    res.status(404);
+    throw new Error("Talent not found");
+  }
+
+  // Fetch requests
   const requests = await hiringRequestModel
-    .find({ talent: talentId })
-    .populate("hirer", "name profilePic_url role");
-  console.log("Talent requests:", requests);
+    .find({ talent: talentId, deletedAt: null })
+    .select("hirer message status createdAt")
+    .populate("hirer", "name profilePic_url role")
+    .sort({ createdAt: -1 });
 
   res.json({
     message: requests.length
@@ -84,7 +99,13 @@ const getHirerRequests = handler(async (req, res) => {
   const hirerId = req.user._id;
 
   // Check if user is a Hirer
-  if (req.user.userType !== "Hirer") {
+  if (
+    req.user.role !== "Director" &&
+    req.user.role !== "Assistant Director" &&
+    req.user.role !== "Casting Director" &&
+    req.user.role !== "Event Manager" &&
+    req.user.role !== "Other"
+  ) {
     res.status(403);
     throw new Error("Only hirers can view sent requests");
   }
@@ -92,7 +113,7 @@ const getHirerRequests = handler(async (req, res) => {
   console.log("Querying hirer requests for ID:", hirerId);
   const requests = await hiringRequestModel
     .find({ hirer: mongoose.Types.ObjectId(hirerId) })
-    .populate("talent", "name profilePic role")
+    .populate("talent", "name images.profilePic.url role")
     .populate("hirer", "name profilePic_url role")
     .lean();
   console.log("Found requests:", requests);
@@ -112,7 +133,7 @@ const getHirerRequests = handler(async (req, res) => {
     talent: {
       _id: request.talent._id,
       name: request.talent.name || "Unknown Talent",
-      profilePic: request.talent.profilePic || null,
+      profilePic: request.talent.images?.profilePic?.url || null,
       role: request.talent.role || "Unknown Role",
     },
   }));
@@ -131,7 +152,8 @@ const updateRequestStatus = handler(async (req, res) => {
   const talentId = req.user._id;
 
   // Check if user is a Talent
-  if (req.user.userType !== "Talent") {
+  const talent = await talentModel.findById(talentId);
+  if (!talent) {
     res.status(403);
     throw new Error("Only talents can update request status");
   }

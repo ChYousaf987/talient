@@ -13,7 +13,7 @@ const hiringRouter = express.Router();
 hiringRouter.post("/send", authHandler, sendHiringRequest);
 
 // Route to get requests received by a talent (talent only)
-hiringRouter.get("/talent", authHandler, getTalentRequests);
+hiringRouter.get("/talent/:talentId", getTalentRequests);
 
 // Route to get requests sent by a hirer (hirer only)
 hiringRouter.get("/hirer", authHandler, getHirerRequests);
